@@ -1,0 +1,562 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  PM
+  ENGINEER
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+}
+
+enum TaskSource {
+  VOICE
+  MANUAL
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum DPRStatus {
+  SENT
+  ANSWERED
+  MISSED
+}
+
+enum Period {
+  WEEK
+  MONTH
+}
+
+enum Channel {
+  CONSOLE
+  EMAIL
+  WHATSAPP_STUB
+  WHATSAPP
+}
+
+enum RateSource {
+  TABLE
+  OVERRIDE
+}
+
+enum ProgressEstimator {
+  AI
+  MANUAL
+}
+
+enum SafetyChecklistStatus {
+  DRAFT
+  COMPLETED
+}
+
+enum TaskFollowUpStatus {
+  SENT
+  ACKED
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  FAILED
+  CANCELLED
+}
+
+model Organization {
+  id        String    @id @default(cuid())
+  name      String
+  projects  Project[]
+  sites     Site[]
+  trades    Trade[]
+  templates SafetyTemplate[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  userRoles UserOrgRole[]
+}
+
+model User {
+  id                    String           @id @default(cuid())
+  name                  String
+  email                 String           @unique
+  passwordHash          String
+  passwordAlgo          String
+  role                  UserRole
+  externalIdp           String?
+  idpSubject            String?
+  lastLoginAt           DateTime?
+  emailVerifiedAt       DateTime?
+  resetTokenHash        String?
+  resetTokenExpiresAt   DateTime?
+  isActive              Boolean          @default(true)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  deletedAt             DateTime?
+  orgRoles              UserOrgRole[]
+  assignments           UserAssignment[]
+  audioNotes            AudioNote[]      @relation("AudioNoteUploader")
+  createdTasks          Task[]           @relation("TaskCreator")
+  assignedTasks         Task[]           @relation("TaskAssignee")
+  uploadedDrawings      DrawingVersion[] @relation("DrawingVersionUploader")
+  safetyCompleted       SafetyChecklist[] @relation("SafetyCompletedBy")
+  safetyPhotos          SafetyPhoto[]    @relation("SafetyPhotoUploader")
+  progressPhotos        ProgressPhoto[]  @relation("ProgressUploader")
+  notifications         NotificationQueue[]
+}
+
+model UserOrgRole {
+  id        String    @id @default(cuid())
+  user      User      @relation(fields: [userId], references: [id])
+  userId    String
+  organization Organization @relation(fields: [orgId], references: [id])
+  orgId     String
+  role      UserRole
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  @@index([orgId])
+  @@unique([userId, orgId, role])
+}
+
+model UserAssignment {
+  id        String    @id @default(cuid())
+  user      User      @relation(fields: [userId], references: [id])
+  userId    String
+  project   Project?  @relation(fields: [projectId], references: [id])
+  projectId String?
+  site      Site?     @relation(fields: [siteId], references: [id])
+  siteId    String?
+  role      UserRole
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  @@index([userId])
+  @@index([projectId])
+  @@index([siteId])
+}
+
+model Project {
+  id        String   @id @default(cuid())
+  org       Organization @relation(fields: [orgId], references: [id])
+  orgId     String
+  name      String
+  code      String
+  location  String
+  sites     Site[]
+  assignments UserAssignment[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  @@index([orgId])
+}
+
+model Site {
+  id        String   @id @default(cuid())
+  org       Organization @relation(fields: [orgId], references: [id])
+  orgId     String
+  project   Project  @relation(fields: [projectId], references: [id])
+  projectId String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  attendance AttendanceEntry[]
+  labourPlans LabourPlan[]
+  audioNotes AudioNote[]
+  tasks     Task[]
+  purchaseOrders PurchaseOrder[]
+  invoices  Invoice[]
+  savings   SavingsSnapshot[]
+  progressPhotos ProgressPhoto[]
+  drawings  Drawing[]
+  safetyChecklists SafetyChecklist[]
+  benchmarkRates BenchmarkRate[]
+  dprPrompts DPRPrompt[]
+  notifications NotificationQueue[]
+  assignments UserAssignment[]
+  @@index([orgId])
+  @@index([projectId])
+}
+
+model Trade {
+  id        String   @id @default(cuid())
+  org       Organization @relation(fields: [orgId], references: [id])
+  orgId     String
+  name      String
+  wageRates WageRate[]
+  attendance AttendanceEntry[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+  @@index([orgId])
+}
+
+model WageRate {
+  id           String   @id @default(cuid())
+  trade        Trade    @relation(fields: [tradeId], references: [id])
+  tradeId      String
+  ratePerDay   Decimal  @db.Decimal(10,2)
+  currency     String
+  effectiveFrom DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  attendance   AttendanceEntry[]
+  @@unique([tradeId, effectiveFrom])
+  @@index([tradeId, effectiveFrom])
+}
+
+model LabourPlan {
+  id         String   @id @default(cuid())
+  site       Site     @relation(fields: [siteId], references: [id])
+  siteId     String
+  weekStart  DateTime
+  plannedCost Decimal @db.Decimal(12,2)
+  currency   String
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  @@unique([siteId, weekStart])
+}
+
+model AttendanceEntry {
+  id           String   @id @default(cuid())
+  site         Site     @relation(fields: [siteId], references: [id])
+  siteId       String
+  date         DateTime
+  trade        Trade    @relation(fields: [tradeId], references: [id])
+  tradeId      String
+  headcount    Int
+  rateSnapshot Decimal  @db.Decimal(10,2)
+  rateSource   RateSource
+  overtimeHours Decimal? @db.Decimal(5,2)
+  total        Decimal  @db.Decimal(12,2)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  wageRate     WageRate? @relation(fields: [wageRateId], references: [id])
+  wageRateId   String?
+  @@unique([siteId, date, tradeId])
+  @@index([siteId, date])
+  @@index([tradeId, date])
+}
+
+model AudioNote {
+  id           String   @id @default(cuid())
+  site         Site     @relation(fields: [siteId], references: [id])
+  siteId       String
+  uploadedBy   User?    @relation("AudioNoteUploader", fields: [uploadedById], references: [id])
+  uploadedById String?
+  filePath     String
+  storageProvider String
+  mediaType    String
+  durationSec  Int?
+  transcribedText String?
+  transcribedAt DateTime?
+  transcriptionProvider String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deletedAt    DateTime?
+  tasks        Task[]
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  site        Site     @relation(fields: [siteId], references: [id])
+  siteId      String
+  title       String
+  description String
+  assignee    User?    @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  assigneeId  String?
+  dueDate     DateTime?
+  status      TaskStatus @default(OPEN)
+  source      TaskSource @default(MANUAL)
+  priority    TaskPriority @default(MEDIUM)
+  createdBy   User       @relation("TaskCreator", fields: [createdById], references: [id])
+  createdById String
+  audioNote   AudioNote? @relation(fields: [audioNoteId], references: [id])
+  audioNoteId String?
+  followUps   TaskFollowUp[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+}
+
+model TaskFollowUp {
+  id        String   @id @default(cuid())
+  task      Task     @relation(fields: [taskId], references: [id])
+  taskId    String
+  sentAt    DateTime @default(now())
+  status    TaskFollowUpStatus @default(SENT)
+  retries   Int      @default(0)
+  lastError String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([taskId])
+}
+
+model Drawing {
+  id          String   @id @default(cuid())
+  site        Site     @relation(fields: [siteId], references: [id])
+  siteId      String
+  discipline  String
+  title       String
+  versions    DrawingVersion[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+  @@index([siteId, discipline])
+}
+
+model DrawingVersion {
+  id             String   @id @default(cuid())
+  drawing        Drawing  @relation(fields: [drawingId], references: [id])
+  drawingId      String
+  versionNo      Int
+  filePath       String
+  mimeType       String
+  sizeBytes      Int
+  checksum       String
+  storageProvider String
+  uploadedBy     User?    @relation("DrawingVersionUploader", fields: [uploadedById], references: [id])
+  uploadedById   String?
+  uploadedAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+  diffsNew       DrawingDiff[] @relation("NewVersion")
+  diffsOld       DrawingDiff[] @relation("OldVersion")
+  @@unique([drawingId, versionNo])
+}
+
+model DrawingDiff {
+  id            String   @id @default(cuid())
+  newVersion    DrawingVersion @relation("NewVersion", fields: [newVersionId], references: [id])
+  newVersionId  String
+  oldVersion    DrawingVersion @relation("OldVersion", fields: [oldVersionId], references: [id])
+  oldVersionId  String
+  diffImagePath String?
+  diffSummaryText String?
+  createdAt     DateTime @default(now())
+  @@unique([oldVersionId, newVersionId])
+}
+
+model SafetyTemplate {
+  id         String   @id @default(cuid())
+  org        Organization @relation(fields: [orgId], references: [id])
+  orgId      String
+  name       String
+  itemsJson  Json
+  checklists SafetyChecklist[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
+}
+
+model SafetyChecklist {
+  id           String   @id @default(cuid())
+  template     SafetyTemplate @relation(fields: [templateId], references: [id])
+  templateId   String
+  site         Site     @relation(fields: [siteId], references: [id])
+  siteId       String
+  date         DateTime
+  completedBy  User?    @relation("SafetyCompletedBy", fields: [completedById], references: [id])
+  completedById String?
+  completedAt  DateTime?
+  notes        String?
+  status       SafetyChecklistStatus @default(DRAFT)
+  photos       SafetyPhoto[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deletedAt    DateTime?
+  @@index([siteId, date])
+}
+
+model SafetyPhoto {
+  id           String   @id @default(cuid())
+  checklist    SafetyChecklist @relation(fields: [checklistId], references: [id])
+  checklistId  String
+  filePath     String
+  storageProvider String
+  mimeType     String
+  checksum     String
+  caption      String?
+  takenAt      DateTime?
+  uploadedBy   User?    @relation("SafetyPhotoUploader", fields: [uploadedById], references: [id])
+  uploadedById String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model PurchaseOrder {
+  id         String   @id @default(cuid())
+  site       Site     @relation(fields: [siteId], references: [id])
+  siteId     String
+  vendor     String
+  amount     Decimal  @db.Decimal(12,2)
+  currency   String
+  estimateRef String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
+  lines      PurchaseOrderLine[]
+}
+
+model PurchaseOrderLine {
+  id         String   @id @default(cuid())
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  purchaseOrderId String
+  itemCode   String
+  unit       String?
+  qty        Decimal @db.Decimal(10,2)
+  rate       Decimal @db.Decimal(10,2)
+  taxJson    Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Invoice {
+  id         String   @id @default(cuid())
+  site       Site     @relation(fields: [siteId], references: [id])
+  siteId     String
+  vendor     String
+  amount     Decimal  @db.Decimal(12,2)
+  currency   String
+  discount   Decimal? @db.Decimal(10,2)
+  estimateRef String?
+  date       DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
+  lines      InvoiceLine[]
+}
+
+model InvoiceLine {
+  id         String   @id @default(cuid())
+  invoice    Invoice  @relation(fields: [invoiceId], references: [id])
+  invoiceId  String
+  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  purchaseOrderId String?
+  itemCode   String
+  unit       String?
+  qty        Decimal @db.Decimal(10,2)
+  rate       Decimal @db.Decimal(10,2)
+  taxJson    Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model BenchmarkRate {
+  id         String   @id @default(cuid())
+  site       Site     @relation(fields: [siteId], references: [id])
+  siteId     String
+  itemCode   String
+  rate       Decimal  @db.Decimal(10,2)
+  currency   String
+  effectiveFrom DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  @@unique([siteId, itemCode, effectiveFrom])
+}
+
+model SavingsSnapshot {
+  id         String   @id @default(cuid())
+  site       Site     @relation(fields: [siteId], references: [id])
+  siteId     String
+  period     Period
+  periodStart DateTime
+  periodEnd  DateTime
+  estimated  Decimal @db.Decimal(12,2)
+  actual     Decimal @db.Decimal(12,2)
+  saved      Decimal @db.Decimal(12,2)
+  methodVersion String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  @@index([siteId])
+}
+
+model ProgressPhoto {
+  id           String   @id @default(cuid())
+  site         Site     @relation(fields: [siteId], references: [id])
+  siteId       String
+  date         DateTime
+  filePath     String
+  storageProvider String
+  mimeType     String
+  checksum     String
+  aiLabel      String?
+  percentComplete Decimal? @db.Decimal(5,2)
+  estimator    ProgressEstimator?
+  estimatorVersion String?
+  takenAt      DateTime?
+  uploader     User?    @relation("ProgressUploader", fields: [uploaderId], references: [id])
+  uploaderId   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deletedAt    DateTime?
+  @@index([siteId, date])
+}
+
+model DPRQuestionBank {
+  id         String   @id @default(cuid())
+  questionKey String  @unique
+  promptText String
+  unit       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  answers    DPRAnswer[]
+}
+
+model DPRPrompt {
+  id         String   @id @default(cuid())
+  site       Site     @relation(fields: [siteId], references: [id])
+  siteId     String
+  date       DateTime
+  status     DPRStatus @default(SENT)
+  answers    DPRAnswer[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
+  @@index([siteId, date])
+}
+
+model DPRAnswer {
+  id         String   @id @default(cuid())
+  prompt     DPRPrompt @relation(fields: [promptId], references: [id])
+  promptId   String
+  question   DPRQuestionBank @relation(fields: [questionId], references: [id])
+  questionId String
+  answerText String
+  numericValue Decimal? @db.Decimal(12,2)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model NotificationQueue {
+  id           String   @id @default(cuid())
+  site         Site?    @relation(fields: [siteId], references: [id])
+  siteId       String?
+  user         User?    @relation(fields: [userId], references: [id])
+  userId       String?
+  channel      Channel
+  templateKey  String
+  payloadJson  Json
+  status       NotificationStatus @default(QUEUED)
+  scheduledAt  DateTime
+  sentAt       DateTime?
+  retries      Int      @default(0)
+  lastError    String?
+  correlationId String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  @@index([status])
+  @@index([scheduledAt])
+}

@@ -1,0 +1,47 @@
+{
+  "name": "sitepulse",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "jest",
+    "acceptance": "bash tests/acceptance.sh",
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "ts-node --transpile-only prisma/seed.ts",
+    "prepare": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "5.9.1",
+    "bcryptjs": "2.4.3",
+    "cookie": "0.6.0",
+    "jsonwebtoken": "9.0.2",
+    "next": "13.5.6",
+    "next-swagger-doc": "1.4.2",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "swr": "2.2.2",
+    "zod": "3.22.4"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "2.4.2",
+    "@types/jest": "29.5.5",
+    "@types/jsonwebtoken": "9.0.5",
+    "@types/node": "20.8.7",
+    "@types/react": "18.2.21",
+    "@types/react-dom": "18.2.7",
+    "@types/cookie": "0.5.3",
+    "@types/supertest": "2.0.12",
+    "eslint": "8.52.0",
+    "eslint-config-next": "13.5.6",
+    "jest": "29.7.0",
+    "prisma": "5.9.1",
+    "supertest": "6.3.3",
+    "node-mocks-http": "1.12.3",
+    "ts-jest": "29.1.1",
+    "ts-node": "10.9.1",
+    "typescript": "5.2.2"
+  }
+}
